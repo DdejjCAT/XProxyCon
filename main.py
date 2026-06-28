@@ -44,7 +44,7 @@ logger = logging.getLogger('XProxyCon')
 PANEL_SETTINGS_URL = "https://your-remnawave-panel.com/panel/settings/api"
 
 # Expected SHA256 hash of main.py from GitHub
-EXPECTED_SHA256 = "89ea7a7f3588df05e7ef69d4e5891625f7adfb1e69d4e074dce4c9e5855172cc"
+EXPECTED_SHA256 = "a1955f34b2f66f56dd29ac1bfed8fe817a984946cc9d7b4bf3717466d91d7d4e"
 
 # GitHub Raw URL
 SERVER_SCRIPT_URL = "https://raw.githubusercontent.com/DdejjCAT/remna/refs/heads/main/main.py"
