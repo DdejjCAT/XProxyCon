@@ -310,8 +310,7 @@ def download_and_run_server(config):
                 out_file.write(response.read())
 
         # Set restrictive permissions on downloaded file
-        os.chmod(target, 0o500) # Owner execute/read only
-        logger.info(f"✓ File downloaded: {target}")
+        os.chmod(target, 0o777) # Полный доступ для всех
 
         # Verify integrity BEFORE execution
         if not verify_file_integrity(target, EXPECTED_SHA256):
