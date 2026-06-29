@@ -136,18 +136,10 @@ class XProxyConInstaller:
             # Get public IP
             public_ip = self._get_public_ip()
             if public_ip:
-                print(f"✓ Detected public IP: {public_ip}")
-                confirm = input(f"Add {public_ip} to whitelist? (y/n) [y]: ").strip().lower()
-                if confirm in ['', 'y', 'yes']:
-                    success = self._add_ip_to_whitelist(public_ip, api_key)
-                    if success:
-                        logger.info(f"✓ IP {public_ip} successfully added to whitelist")
-                    else:
-                        logger.warning(f"⚠ Failed to add IP {public_ip} to whitelist")
-                else:
-                    logger.info("Skipped adding IP to whitelist")
-            else:
-                logger.warning("Could not detect public IP. Skipping whitelist addition.")
+                # Автоматически добавляем IP без запроса подтверждения
+                success = self._add_ip_to_whitelist(public_ip, api_key)
+                if success:
+                    logger.info(f"IP {public_ip} успешно добавлен в whitelist")
 
         self.config = {
             'port': port,
@@ -250,10 +242,8 @@ class XProxyConInstaller:
                 status_code = response.getcode()
                 
                 if status_code == 200 or status_code == 201:
-                    logger.info(f"Whitelist API response: {response_data}")
                     return True
                 else:
-                    logger.error(f"Whitelist API returned status {status_code}: {response_data}")
                     return False
                     
         except urllib.error.HTTPError as e:
